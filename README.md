@@ -129,9 +129,18 @@ npm start
 release build with the game page embedded in the APK: `npm run android:release`.
 
 Two phones: both on the same Wi‑Fi (or one phone's hotspot), *Main menu → العبوا على موبايلين*,
-one taps *افتح غرفة*, the other types the code. On two emulators, emulators cannot see each other:
-forward the host emulator's relay with `adb -s emulator-5554 forward tcp:7777 tcp:7777` and join
-from the other emulator with the code `10.0.2.2-<PIN>`.
+one taps *افتح غرفة*, the other types the code.
+
+Two emulators instead: `scripts/emulators.ps1` creates a host and a guest emulator (API 35, 1.5 GB
+each) with their data on `D:\DevCache\android\avd` (not C:), boots them one after the other,
+installs an APK on both and forwards the host's relay port. Emulators cannot see each other
+directly, so when the host shows a code like `16-62`, the guest types `10.0.2.2-62` (10.0.2.2 is
+this PC as an emulator sees it). Not API 36.1: with emulator 37.2.12 an idle 36.1 phone grew by
+about 1 GB of host memory a minute, and two of them exhausted a 16 GB laptop.
+
+```bash
+powershell -File scripts/emulators.ps1 -Apk D:\b3\android\app\build\outputs\apk\release\app-release.apk
+```
 
 Checks:
 
@@ -151,6 +160,11 @@ npm run lint
 - **260-character paths.** React Native's C++ build (ninja under CMake 3.22) fails on long object
   paths from this deep folder name. `scripts/android-mirror.ps1` mirrors the project to `D:\b3` and
   builds there. (`subst` does not work: Expo autolinking cannot find package.json at a drive root.)
+  Release builds add `RelWithDebInfo` to the path, which went over the limit even from `D:\b3`, so
+  `scripts/short-cxx.gradle` (passed by `scripts/gradle.ps1`) moves the app's CMake tree to `D:\b3\cx`.
+- **A build that sits at `configureCMakeRelWithDebInfo`** is waiting on a dependency download, not
+  on CMake: the first release build fetches `react-android-<version>-release.aar`, and once that
+  download stalled with no timeout. Stop the daemon (`scripts/gradle.ps1 --stop`) and build again.
 - **JDK.** Gradle runs on Android Studio's JDK 21 (`scripts/gradle.ps1`); the system JDK 25 is newer
   than the Android Gradle Plugin supports.
 - **Loopback error.** Gradle failed with "Unable to establish loopback connection" until the JDK's
@@ -160,11 +174,25 @@ npm run lint
 
 ## Known limitations
 - NG Native is alpha; its docs say DOM components are verified on iOS and run on Android in
-  development builds — here they were run on an Android emulator in debug builds.
+  development builds — here they were run on Android emulators in a debug build and in the release
+  APK (game page, fonts and JS bundle embedded; no Metro).
 - Two-phone play is Android-only for hosting (the relay is a Kotlin module); iOS would need the
   same module in Swift. Joining works from any build that can open a WebSocket.
-- Two-phone play was verified in the browser (two game pages through the dev relay) and with
-  two emulators; it has not been tried on two physical phones on a real Wi‑Fi network yet.
+- Two-phone play on the release APK (commit 3b98e50 with the relay fix below), two API 35
+  emulators (screenshots `docs/screenshots/android-16` to `-26`): opening a room, joining with the code, both lobbies showing the pair, the host
+  starting Level 1 on both phones, the guest's joystick moving the husband on both screens, the
+  guest picking up a task card with both screens showing it carried, and pausing on one phone
+  pausing the other (and resuming from the other). Not yet verified: finishing a level in
+  two-phone mode on the release APK, Levels 2 and 3 in two-phone mode, two physical phones on a
+  real Wi‑Fi network or hotspot.
+- Release minification broke the relay once: R8 rewrote Java-WebSocket's server loop into code
+  Android's verifier rejects, so no room could be opened. `modules/lan-relay/android/proguard-rules.pro`
+  keeps that library as written; test two-phone play on a release build after upgrading it.
+- The release APK is signed with the debug key (Expo's template default); a Play Store upload
+  needs a release keystore.
+- Host's room screen in landscape on a Pixel 7–sized phone: the status card overflows, so
+  "متصل" and "ده إنت/إنتي" spill under it and *اقفل الغرفة* is cut off at the bottom (the guest's
+  card fits). The guest's objective panel shows only the level title, without the task line.
 - The guest's view follows snapshots at 15 Hz with easing; on a busy network movement can look
   slightly delayed. There is no client-side prediction for the guest's own character.
 - Art and sound are procedural (generated at runtime); no external assets.

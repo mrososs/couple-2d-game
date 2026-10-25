@@ -1,0 +1,9 @@
+// Gradle init script, passed by gradle.ps1: moves the app's CMake build tree from android/app/.cxx
+// to <mirror>/cx. ninja (CMake 3.22) cannot create directories past 260 characters, and in release
+// builds the ".cxx\RelWithDebInfo\<hash>" prefix pushes react-native-safe-area-context's codegen
+// object directory to 266 characters even from D:\b3; from <mirror>/cx it is about 251.
+allprojects {
+  plugins.withId('com.android.application') {
+    android.externalNativeBuild.cmake.buildStagingDirectory = new File(rootDir.parentFile, 'cx')
+  }
+}
