@@ -1,21 +1,24 @@
 {
   "expo": {
-    "name": "before-we-become-three",
+    "name": "قبل ما نبقى تلاتة",
     "slug": "before-we-become-three",
-    "version": "1.0.0",
+    "version": "0.1.0",
     "platforms": [
       "ios",
       "android"
     ],
-    "orientation": "portrait",
+    "orientation": "landscape",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
+    "backgroundColor": "#FFF4E6",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "eg.beforewebecomethree"
     },
     "android": {
+      "package": "eg.beforewebecomethree",
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFE3C7",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -23,13 +26,18 @@
       "predictiveBackGestureEnabled": false
     },
     "scheme": "beforewebecomethree",
-    "extra": {
-      "router": {
-        "root": "src/app"
-      }
-    },
     "plugins": [
-      "@ng-native/metro"
+      "@ng-native/metro",
+      "expo-font",
+      "expo-screen-orientation",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
     ]
   }
 }

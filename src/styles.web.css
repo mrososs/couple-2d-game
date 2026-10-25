@@ -1,0 +1,35 @@
+/* The browser host's page: the native screens' font, and a full-window root. */
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('./fonts/BalooBhaijaan2_400Regular.ttf') format('truetype');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('./fonts/BalooBhaijaan2_600SemiBold.ttf') format('truetype');
+  font-weight: 600;
+}
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('./fonts/BalooBhaijaan2_800ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+}
+
+[data-rn='text'] {
+  font-family: 'Baloo Bhaijaan 2', sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: #fff4e6;
+  overflow: hidden;
+}
+
+#root {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+}

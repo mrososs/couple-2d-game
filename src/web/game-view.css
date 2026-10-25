@@ -1,0 +1,48 @@
+/* Baloo Bhaijaan 2, SIL Open Font License (src/fonts/OFL.txt). The url()s ship with the page. */
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('../fonts/BalooBhaijaan2_400Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('../fonts/BalooBhaijaan2_600SemiBold.ttf') format('truetype');
+  font-weight: 600;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('../fonts/BalooBhaijaan2_800ExtraBold.ttf') format('truetype');
+  font-weight: 800;
+  font-display: swap;
+}
+
+:host {
+  position: fixed;
+  inset: 0;
+  display: block;
+  overflow: hidden;
+  background: #2e2420;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+.stage {
+  position: absolute;
+  inset: 0;
+}
+
+.loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 48px;
+  color: #fff8ec;
+}

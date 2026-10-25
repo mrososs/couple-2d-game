@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Two-phone test harness (development)</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #2e2420;
+        display: flex;
+        gap: 6px;
+      }
+      iframe {
+        flex: 1;
+        border: 0;
+        height: 100%;
+      }
+    </style>
+  </head>
+  <body>
+    <!--
+      Two game pages, as on two phones: the left one hosts, the right one joins, both through the
+      development relay (npm run relay). ?scene=level02 picks the level. Each frame's window is
+      window.host / window.guest, for scripted checks.
+    -->
+    <script type="module">
+      const scene = new URLSearchParams(location.search).get('scene') ?? 'level01';
+      const base = { sceneId: scene, sessionId: 1, lead: 'wife', names: { wife: 'منى', husband: 'كريم' }, outfits: { wife: 0, husband: 0 }, devMode: false };
+      const url = `ws://${location.hostname}:7777`;
+      for (const [role, me] of [['host', 'wife'], ['guest', 'husband']]) {
+        const frame = document.createElement('iframe');
+        frame.name = JSON.stringify({ inputs: { session: { ...base, lead: me, net: { role, url, pin: '42', me } } } });
+        frame.src = 'game.html';
+        document.body.appendChild(frame);
+        window[role] = frame.contentWindow;
+      }
+      window.addEventListener('message', (e) => {
+        const data = e.data?.data;
+        if (typeof data === 'string' && data.includes('"output"')) (window.events ??= []).push({ from: e.source === window.host ? 'host' : 'guest', data: JSON.parse(data) });
+      });
+    </script>
+  </body>
+</html>

@@ -1,82 +1,106 @@
-import { Component, inject, signal } from '@angular/core';
-import { Pressable, SafeAreaProvider, SafeAreaView, Text, View } from '@ng-native/components';
-import { StatusBar } from '@ng-native/device';
+import { Component, inject } from '@angular/core';
+import { SafeAreaProvider, View } from '@ng-native/components';
+import { HardwareBack, StatusBar } from '@ng-native/device';
+import { DeviceOrientation } from '@ng-native/expo/orientation';
+import { AboutScreen } from './screens/about.screen.ts';
+import { BridgeLabScreen } from './screens/bridge-lab.screen.ts';
+import { CharacterSelectScreen } from './screens/character-select.screen.ts';
+import { CoopLobbyScreen } from './screens/coop-lobby.screen.ts';
+import { GameplayScreen } from './screens/gameplay.screen.ts';
+import { LevelCompleteScreen } from './screens/level-complete.screen.ts';
+import { LevelSelectScreen } from './screens/level-select.screen.ts';
+import { MainMenuScreen } from './screens/main-menu.screen.ts';
+import { SettingsScreen } from './screens/settings.screen.ts';
+import { WelcomeScreen } from './screens/welcome.screen.ts';
+import { Navigator } from './services/navigator.ts';
 
 /**
- * Element names are lowercase, and that is load-bearing rather than style: an uppercase name such
- * as <View> matches no component's selector, and the Metro transform fails the build on it.
+ * The app shell: right-to-left for the Arabic interface, one screen at a time from the navigator.
+ * Gameplay controls live inside the game page and keep their physical positions; only these
+ * native screens are mirrored.
  */
 @Component({
-  imports: [Pressable, SafeAreaProvider, SafeAreaView, Text, View],
+  imports: [
+    AboutScreen,
+    BridgeLabScreen,
+    CharacterSelectScreen,
+    CoopLobbyScreen,
+    GameplayScreen,
+    LevelCompleteScreen,
+    LevelSelectScreen,
+    MainMenuScreen,
+    SafeAreaProvider,
+    SettingsScreen,
+    View,
+    WelcomeScreen,
+  ],
   selector: 'app-root',
   template: `
-    <safe-area-provider>
-      <safe-area-view class="screen">
-        <view class="body">
-          <text class="title">Angular, natively</text>
-          <text class="hint">Real native views. React is never in the render path.</text>
-
-          <pressable accessibilityRole="button" class="button" (press)="count.set(count() + 1)">
-            <text class="label">Tapped {{ count() }} times</text>
-          </pressable>
-        </view>
-      </safe-area-view>
+    <safe-area-provider class="fill">
+      <view class="app">
+        @let screen = nav.current();
+        @switch (screen.name) {
+          @case ('welcome') {
+            <bwbt-welcome />
+          }
+          @case ('menu') {
+            <bwbt-main-menu />
+          }
+          @case ('characters') {
+            <bwbt-character-select />
+          }
+          @case ('levels') {
+            <bwbt-level-select />
+          }
+          @case ('game') {
+            @if (screen.name === 'game') {
+              <bwbt-gameplay [sceneId]="screen.sceneId" [coop]="!!screen.coop" />
+            }
+          }
+          @case ('result') {
+            @if (screen.name === 'result') {
+              <bwbt-level-complete [result]="screen.result" [unlocked]="screen.unlocked" [coop]="!!screen.coop" />
+            }
+          }
+          @case ('coop') {
+            <bwbt-coop-lobby />
+          }
+          @case ('settings') {
+            <bwbt-settings />
+          }
+          @case ('about') {
+            <bwbt-about />
+          }
+          @case ('bridge') {
+            <bwbt-bridge-lab />
+          }
+        }
+      </view>
     </safe-area-provider>
   `,
   styles: `
     :host {
       flex: 1;
     }
-    .screen {
+    .fill {
       flex: 1;
-      background-color: #f5f5f7;
     }
-    .body {
+    .app {
       flex: 1;
-      justify-content: center;
-      gap: 12px;
-      padding: 24px;
-    }
-    .title {
-      color: #101014;
-      font-size: 28px;
-      font-weight: 700;
-    }
-    .hint {
-      color: #5f5f6b;
-      font-size: 15px;
-    }
-    .button {
-      align-items: center;
-      margin-top: 8px;
-      padding: 14px;
-      border-radius: 10px;
-      background-color: #3b6ef5;
-    }
-    .label {
-      color: #ffffff;
-      font-size: 16px;
-      font-weight: 600;
-    }
-    @media (prefers-color-scheme: dark) {
-      .screen {
-        background-color: #101014;
-      }
-      .title {
-        color: #ffffff;
-      }
-      .hint {
-        color: #8b8b96;
-      }
+      direction: rtl;
+      background-color: #fff4e6;
     }
   `,
 })
 export class App {
-  protected readonly count = signal(0);
+  protected readonly nav = inject(Navigator);
 
   constructor() {
-    // Dark status bar icons in light mode and light ones in dark mode. Unclaimed, Android keeps
-    // light icons whatever the scheme.
-    inject(StatusBar).set({ style: 'auto' });
+    // The whole app is landscape. Held here for the app's lifetime: releasing the gameplay
+    // screen's own lock would otherwise unlock rotation altogether, overriding app.json.
+    inject(DeviceOrientation).lock('landscape');
+    inject(StatusBar).set({ style: 'dark', hidden: true });
+    // Android's back button walks back through the screens, and leaves the app from the first.
+    inject(HardwareBack).handle(() => this.nav.back());
   }
 }

@@ -1,0 +1,20 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'expo.modules.lanrelay'
+version = '0.1.0'
+
+android {
+  namespace "expo.modules.lanrelay"
+  defaultConfig {
+    versionCode 1
+    versionName '0.1.0'
+  }
+}
+
+dependencies {
+  // A small, dependency-free WebSocket server (MIT licence).
+  implementation 'org.java-websocket:Java-WebSocket:1.6.0'
+}

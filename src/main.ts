@@ -5,29 +5,32 @@ import 'expo';
 import { AppRegistry, Image, Platform, processColor } from 'react-native';
 import { mount } from '@ng-native/platform';
 import { currentConditions, deviceTokens, watchConditions } from '@ng-native/device';
-import { getFabricUIManager, registerPlatformComponents } from '@ng-native/fabric';
+import { Storage } from '@ng-native/expo/async-storage';
+import { loadFonts } from '@ng-native/expo/fonts';
+import { getFabricUIManager, registerPlatformComponents, styleSheetOf } from '@ng-native/fabric';
 import { App } from './app/app.ts';
+import { GlobalStyles } from './app/global-styles.ts';
+import { KEY_VALUE_STORE } from './app/services/kv-store.ts';
 
 registerPlatformComponents(Platform.OS);
 
 AppRegistry.registerRunnable('main', ({ rootTag }) => {
+  const globalStyles = styleSheetOf(GlobalStyles);
+  // Text laid out before the Arabic face registers is laid out again once it does.
+  void loadFonts(globalStyles).catch((error: unknown) => console.error(error));
+
   const app = mount(Number(rootTag), App, getFabricUIManager(), {
-    // Colours, as the integers the platform wants.
     processColor,
-    // What `@media` resolves against. Without it every media query is false and a responsive
-    // layout renders as its smallest case.
     conditions: currentConditions(),
-    // Values only the device knows - the hairline width, which is a third of a point on a 3x
-    // screen. Without it `1px` is what you get, and that is a visibly fat divider.
     tokens: deviceTokens(),
-    // Turns a `require('./x.png')` into something native can load. Without it images are blank.
     resolveAssetSource: (value) => Image.resolveAssetSource(value as never),
+    globalStyles,
+    // Progress is the native app's to keep: AsyncStorage on disk, not the game page's storage,
+    // which on Android lasts only as long as the page.
+    providers: [{ provide: KEY_VALUE_STORE, useExisting: Storage }],
   });
 
-  // Re-resolves the conditions when the device rotates or the theme changes. A rotation dirties
-  // no component and no binding, so without this nothing re-renders and `dark:` stops following
-  // the system switch. It stops with the app, which Android destroys when it recreates the
-  // activity, so the app mounted in its place is the only one still watching.
+  // Re-resolves the conditions when the device rotates or the theme changes.
   const stopWatching = watchConditions(app.engine);
   app.applicationRef.onDestroy(stopWatching);
 });

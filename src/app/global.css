@@ -1,0 +1,38 @@
+/* Baloo Bhaijaan 2 (SIL Open Font License, src/fonts/OFL.txt): a round, friendly Arabic face. */
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('../fonts/BalooBhaijaan2_400Regular.ttf');
+  font-weight: 400;
+}
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('../fonts/BalooBhaijaan2_600SemiBold.ttf');
+  font-weight: 600;
+}
+@font-face {
+  font-family: 'Baloo Bhaijaan 2';
+  src: url('../fonts/BalooBhaijaan2_800ExtraBold.ttf');
+  font-weight: 800;
+}
+
+:root {
+  --ink: #3b2416;
+  --ink-soft: #7a5644;
+  --paper: #fffbf5;
+  --cream: #fff4e6;
+  --sand: #f6e3c6;
+  --coral: #e8735a;
+  --coral-dark: #c4553f;
+  --teal: #2a9d8f;
+  --teal-dark: #1f7a6f;
+  --sun: #f2c14e;
+  --plum: #8e6bbf;
+  --leaf: #7ba05b;
+  --wife: #e8735a;
+  --husband: #3e7cb1;
+}
+
+text {
+  font-family: 'Baloo Bhaijaan 2';
+  color: var(--ink);
+}

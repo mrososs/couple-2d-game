@@ -1,0 +1,6 @@
+{
+  "name": "lan-relay",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A WebSocket relay on the local network, for two-phone play (Android)."
+}

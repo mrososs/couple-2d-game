@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "web"],
+      "port": 5173
+    },
+    {
+      "name": "metro",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 8081
+    }
+  ]
+}

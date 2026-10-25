@@ -1,0 +1,54 @@
+/* Shared look for the menu screens: cartoon cards with a dark outline and a hard drop shadow. */
+.card {
+  border-radius: 26px;
+  border-width: 3px;
+  border-color: #3b2416;
+  background-color: #fffbf5;
+  box-shadow: 0 5px 0 #3b2416;
+  padding: 16px;
+}
+.h1 {
+  font-family: 'Baloo Bhaijaan 2';
+  font-weight: 800;
+  font-size: 44px;
+  color: #3b2416;
+}
+.h2 {
+  font-family: 'Baloo Bhaijaan 2';
+  font-weight: 800;
+  font-size: 24px;
+  color: #3b2416;
+}
+.h3 {
+  font-family: 'Baloo Bhaijaan 2';
+  font-weight: 600;
+  font-size: 19px;
+  color: #3b2416;
+}
+.body {
+  font-family: 'Baloo Bhaijaan 2';
+  font-size: 16px;
+  color: #5b3a29;
+}
+.muted {
+  font-family: 'Baloo Bhaijaan 2';
+  font-size: 14px;
+  color: #8a6a55;
+}
+.chip {
+  flex-direction: row;
+  align-self: flex-start;
+  border-radius: 999px;
+  padding: 2px 12px;
+  background-color: #f6e3c6;
+}
+.chip-text {
+  font-family: 'Baloo Bhaijaan 2';
+  font-weight: 600;
+  font-size: 14px;
+  color: #5b3a29;
+}
+.row {
+  flex-direction: row;
+  align-items: center;
+}
