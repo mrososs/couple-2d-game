@@ -2,7 +2,10 @@ import { mount } from '@ng-native/web';
 import { App } from './app/app.ts';
 import { DEV_RELAY_URL } from './app/services/coop.ts';
 import { KEY_VALUE_STORE } from './app/services/kv-store.ts';
+import { ONLINE_AUTH_STORAGE, ONLINE_CONFIG } from './app/services/online.ts';
+import { onlineConfigFromEnv } from './online/client.ts';
 import { LocalStorageStore } from './web-host/local-storage-store.ts';
+import { onlineAuthStorage } from './web-host/online-auth-storage.ts';
 
 // The browser host: the same native screens, rendered into the DOM by @ng-native/web, with
 // progress kept in the page's localStorage instead of the phone's AsyncStorage, and two-phone
@@ -13,5 +16,7 @@ mount(document.getElementById('root')!, App, {
   providers: [
     { provide: KEY_VALUE_STORE, useValue: new LocalStorageStore(profile ? `${profile}:` : '') },
     { provide: DEV_RELAY_URL, useValue: `ws://${location.hostname}:7777` },
+    { provide: ONLINE_CONFIG, useValue: onlineConfigFromEnv() },
+    { provide: ONLINE_AUTH_STORAGE, useValue: onlineAuthStorage(profile ? `${profile}:` : '') },
   ],
 });

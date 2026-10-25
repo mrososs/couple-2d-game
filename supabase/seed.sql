@@ -1,0 +1,6 @@
+-- Development seed data. Intentionally empty.
+--
+-- The three levels are reference data every environment needs, so they ship as a migration
+-- (migrations/*_levels_reference_data.sql) and re-running it is safe. Players, couples and rooms
+-- are created by the game itself; the integration tests create their own disposable players and
+-- remove them afterwards.

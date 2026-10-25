@@ -8,9 +8,12 @@ import { currentConditions, deviceTokens, watchConditions } from '@ng-native/dev
 import { Storage } from '@ng-native/expo/async-storage';
 import { loadFonts } from '@ng-native/expo/fonts';
 import { getFabricUIManager, registerPlatformComponents, styleSheetOf } from '@ng-native/fabric';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { App } from './app/app.ts';
 import { GlobalStyles } from './app/global-styles.ts';
 import { KEY_VALUE_STORE } from './app/services/kv-store.ts';
+import { ONLINE_AUTH_STORAGE, ONLINE_CONFIG } from './app/services/online.ts';
+import { onlineConfigFromEnv } from './online/client.ts';
 
 registerPlatformComponents(Platform.OS);
 
@@ -27,7 +30,13 @@ AppRegistry.registerRunnable('main', ({ rootTag }) => {
     globalStyles,
     // Progress is the native app's to keep: AsyncStorage on disk, not the game page's storage,
     // which on Android lasts only as long as the page.
-    providers: [{ provide: KEY_VALUE_STORE, useExisting: Storage }],
+    providers: [
+      { provide: KEY_VALUE_STORE, useExisting: Storage },
+      // Online play (Supabase): the project from EXPO_PUBLIC_SUPABASE_*, and the player's session
+      // kept on disk so the same anonymous player comes back after a restart.
+      { provide: ONLINE_CONFIG, useValue: onlineConfigFromEnv() },
+      { provide: ONLINE_AUTH_STORAGE, useValue: AsyncStorage },
+    ],
   });
 
   // Re-resolves the conditions when the device rotates or the theme changes.

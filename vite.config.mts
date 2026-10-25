@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ngNativeWeb } from '@ng-native/web/vite';
-import { defineConfig, type Plugin } from 'vite';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 
 /**
  * The browser build: the same NG Native screens rendered through `@ng-native/web`, and the game
@@ -29,10 +29,12 @@ function domComponentReferences(): Plugin {
       if (!importer || importer.replaceAll('\\', '/').includes('/src/web/')) return null;
       const resolved = await this.resolve(source, importer, { ...options, skipSelf: true });
       const page = resolved && DOM_PAGES[resolve(resolved.id.split('?')[0])];
-      return page ? REF + page : null;
+      // Ends in `.js`, not `.html`: the production build's HTML plugin claims every `.html` id.
+      return page ? `${REF}${page}.js` : null;
     },
     load(id) {
-      return id.startsWith(REF) ? `export default { domComponent: ${JSON.stringify(id.slice(REF.length))} };` : null;
+      if (!id.startsWith(REF)) return null;
+      return `export default { domComponent: ${JSON.stringify(id.slice(REF.length, -'.js'.length))} };`;
     },
   };
 }
@@ -94,7 +96,14 @@ function artExport(): Plugin {
   };
 }
 
+// The Supabase project for online play (src/online/client.ts reads `process.env.EXPO_PUBLIC_*`,
+// which Expo inlines on a phone; here `define` does the same from .env.local). Only the URL and
+// the publishable key, both meant to ship in the app.
+const env = loadEnv('development', root, 'EXPO_PUBLIC_');
+const ONLINE_ENV = ['EXPO_PUBLIC_SUPABASE_URL', 'EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY'];
+
 export default defineConfig({
+  define: Object.fromEntries(ONLINE_ENV.map((name) => [`process.env.${name}`, JSON.stringify(env[name] ?? '')])),
   plugins: [domComponentReferences(), gameFonts(), artExport(), ngNativeWeb()],
   resolve: {
     alias: {
