@@ -38,14 +38,42 @@ export interface InputHubOptions {
   readonly single?: boolean;
 }
 
+/** The other phone's controls, as HostNet passes them on after checking them (net/protocol.ts). */
+export interface RemoteInput {
+  /** The guest's input epoch; press counters start from zero in each. */
+  readonly ep: string;
+  readonly seq: number;
+  readonly x: number;
+  readonly y: number;
+  /** Presses since the epoch began. */
+  readonly ia: number;
+  readonly ro: number;
+}
+
+/** Where an input epoch's counters stood when last read. */
+interface EpochCounters {
+  seq: number;
+  interacts: number;
+  rotates: number;
+}
+
 interface RemoteControl {
   x: number;
   y: number;
-  interacts: number;
-  rotates: number;
-  seenInteracts: number;
-  seenRotates: number;
+  /**
+   * Counters per epoch, the most recent few: a late message from an earlier epoch picks up where
+   * that epoch left off instead of resetting anything (which would replay presses).
+   */
+  epochs: Map<string, EpochCounters>;
+  /** Presses waiting for a frame of their own. */
+  pendingInteracts: number;
+  pendingRotates: number;
 }
+
+/** Presses one message may add, and presses that may wait: a burst beyond is not a person. */
+const MAX_NEW_PRESSES = 4;
+const MAX_PENDING_PRESSES = 6;
+const EPOCHS_KEPT = 4;
 
 export class InputHub {
   /** The character the touch controls drive. */
@@ -98,15 +126,46 @@ export class InputHub {
     }
   }
 
-  /** Drives a character from the other phone. Presses arrive as running counts. */
-  setRemote(id: CharacterId, x: number, y: number, interacts: number, rotates: number): void {
+  /**
+   * Drives a character from the other phone. Presses arrive as running counts per epoch: a new
+   * epoch counts from zero (so its very first press is kept), a message older than the last one
+   * read changes nothing, and every press gets a frame of its own - two presses that arrive
+   * between frames are two interactions, not one. With `countPresses` false (the guest is still
+   * looking at a finished run) only the stick is taken.
+   */
+  setRemote(id: CharacterId, input: RemoteInput, countPresses = true): void {
+    let control = this.remote.get(id);
+    if (!control) {
+      control = { x: 0, y: 0, epochs: new Map(), pendingInteracts: 0, pendingRotates: 0 };
+      this.remote.set(id, control);
+    }
+    if (!countPresses) {
+      // Aimed at an earlier run: the stick still says where the player wants to go, nothing more.
+      this.setStickOf(control, input.x, input.y);
+      return;
+    }
+    let epoch = control.epochs.get(input.ep);
+    if (!epoch) {
+      epoch = { seq: -1, interacts: 0, rotates: 0 };
+      control.epochs.set(input.ep, epoch);
+      if (control.epochs.size > EPOCHS_KEPT) control.epochs.delete(control.epochs.keys().next().value!);
+    }
+    if (input.seq <= epoch.seq) return;
+    epoch.seq = input.seq;
+    this.setStickOf(control, input.x, input.y);
+    const newInteracts = Math.max(0, Math.min(MAX_NEW_PRESSES, input.ia - epoch.interacts));
+    const newRotates = Math.max(0, Math.min(MAX_NEW_PRESSES, input.ro - epoch.rotates));
+    epoch.interacts = Math.max(epoch.interacts, input.ia);
+    epoch.rotates = Math.max(epoch.rotates, input.ro);
+    control.pendingInteracts = Math.min(MAX_PENDING_PRESSES, control.pendingInteracts + newInteracts);
+    control.pendingRotates = Math.min(MAX_PENDING_PRESSES, control.pendingRotates + newRotates);
+  }
+
+  private setStickOf(control: RemoteControl, x: number, y: number): void {
     const len = Math.hypot(x, y);
-    const control = this.remote.get(id) ?? { x: 0, y: 0, interacts, rotates, seenInteracts: interacts, seenRotates: rotates };
-    control.x = len > 1 ? x / len : x;
-    control.y = len > 1 ? y / len : y;
-    control.interacts = interacts;
-    control.rotates = rotates;
-    this.remote.set(id, control);
+    const ok = Number.isFinite(len);
+    control.x = !ok ? 0 : len > 1 ? x / len : x;
+    control.y = !ok ? 0 : len > 1 ? y / len : y;
   }
 
   /** The other phone went quiet: its character stops rather than walking on. */
@@ -118,24 +177,26 @@ export class InputHub {
     }
   }
 
+  /** Whether a character is driven from the other phone (and has sent anything yet). */
+  isRemote(id: CharacterId): boolean {
+    return this.remote.has(id);
+  }
+
   /** Reads the devices once at the start of a frame; `intent()` then answers from that snapshot. */
   beginFrame(): void {
     if (this.swapKey && Phaser.Input.Keyboard.JustDown(this.swapKey)) this.swap();
     for (const id of ['wife', 'husband'] as const) {
+      const remote = this.remote.get(id);
       if (!this.enabled) {
+        // Presses made while the controls are off (the level intro) do not fire afterwards.
+        if (remote) remote.pendingInteracts = remote.pendingRotates = 0;
         this.frame.set(id, IDLE);
         continue;
       }
-      const remote = this.remote.get(id);
       if (remote) {
-        const intent = {
-          x: remote.x,
-          y: remote.y,
-          interact: remote.interacts > remote.seenInteracts,
-          rotate: remote.rotates > remote.seenRotates,
-        };
-        remote.seenInteracts = remote.interacts;
-        remote.seenRotates = remote.rotates;
+        const intent = { x: remote.x, y: remote.y, interact: remote.pendingInteracts > 0, rotate: remote.pendingRotates > 0 };
+        if (intent.interact) remote.pendingInteracts--;
+        if (intent.rotate) remote.pendingRotates--;
         this.frame.set(id, intent);
         continue;
       }

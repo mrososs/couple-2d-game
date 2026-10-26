@@ -85,6 +85,11 @@ const LEVEL1: LevelContent = {
     shared: { emoji: '🤝', title: 'قرارات بتتاخد سوا', body: 'اختيار الدكتورة والميزانية وخطة السهر قرارات بتخص الاتنين، فبتتاخد سوا.' },
     care: { emoji: '💪', title: 'الشيل التقيل مش عليها لوحدها', body: 'وقت الحمل احتياجات الجسم بتتغير، فالمجهود البدني التقيل بيتوزع بحساب.' },
     balance: { emoji: '⚖️', title: 'حِمل متوازن', body: 'مفيش تقسيم واحد صح. المهم إن الحِمل يريّح الاتنين ويتغير لما الظروف تتغير.' },
+    agreedSplit: {
+      emoji: '🗣️',
+      title: 'تقسيم اتفقتوا عليه',
+      body: 'واحد منكم شايل أكتر، واتكلمتوا في ده واتفقتوا. التقسيم المناسب هو اللي يناسب ظروفكم، وبيتراجع لما الظروف تتغير.',
+    },
     talk: { emoji: '💬', title: 'اتكلموا قبل ما تقرروا', body: 'كل واحد كان عارف جدوله بس. لقيتوا اليوم المناسب لما شاركتوا المعلومة.' },
     revised: { emoji: '🔁', title: 'التعديل مش غلط', body: 'رجعتوا للخطة وعدّلتوها. ده بالظبط اللي بيحصل في الحياة الحقيقية.' },
   },
@@ -102,7 +107,7 @@ const LEVEL1: LevelContent = {
     },
   ],
   reviewNotes: [
-    'The balance range (wife share 30%-55%) is a game rule, not clinical guidance.',
+    'The 70% "most of the load" prompt is an illustrative game rule, the same for both partners, and never fails a plan on its own; it is not a definition of fairness or clinical guidance.',
     'The note that heavy lifting should not fall on the pregnant partner alone is general caution; confirm wording with an obstetric professional.',
   ],
 };

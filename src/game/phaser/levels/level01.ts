@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 import type { CharacterId } from '../../bridge/protocol.ts';
 import { APARTMENT_DECOR, LIVING_WALL, SITTING_CORNER } from '../../domain/levels/apartment-decor.ts';
 import { L1_CARDS, L1_SCHEDULE, levelContent } from '../../domain/levels/content.ts';
-import { DAYS, PlanningBoard, SchedulePuzzle, type Lane, type PlanIssue, type ScheduleVerdict } from '../../domain/planning.ts';
+import { DAYS, LOPSIDED_SHARE, PlanningBoard, SchedulePuzzle, type Lane, type PlanIssue, type ScheduleVerdict } from '../../domain/planning.ts';
 import { APARTMENT } from '../../domain/tile-map.ts';
 import { BOARD_LANE_W, CALENDAR_CELL_W } from '../art/stations.ts';
 import { ensureTexture } from '../art/texture-factory.ts';
@@ -45,6 +45,8 @@ export class Level01Controller implements LevelController {
   private calendarGlow?: Phaser.GameObjects.Image;
   private called = false;
   private failedReviews = 0;
+  /** The plan as it was when the couple were asked about a lopsided split. */
+  private agreedPlan: string | null = null;
   private widget?: { wifeBar: Phaser.GameObjects.Rectangle; husbandBar: Phaser.GameObjects.Rectangle; count: Phaser.GameObjects.Text; share: Phaser.GameObjects.Text; day: Phaser.GameObjects.Text };
 
   start(ctx: LevelContext): void {
@@ -268,9 +270,21 @@ export class Level01Controller implements LevelController {
   private reviewPlan(): void {
     const { feedback, hud, objectives, players } = this.ctx;
     const result = this.board.evaluate();
+    if (result.ok && result.notes.length && this.agreedPlan !== this.board.key()) {
+      // Most of the load on one of them: not wrong, but worth saying out loud. Confirming the
+      // review together once more, with the plan unchanged, is the couple agreeing to it.
+      this.agreedPlan = this.board.key();
+      const note = result.notes[0];
+      const who = players[note.heavier];
+      feedback.play('soft');
+      hud.toast(`${who.name} عليه${note.heavier === 'wife' ? 'ا' : ''} ${Math.round(note.share * 100)}٪ من الشغل. لو ده مناسب لظروفكم، أكّدوا المراجعة سوا تاني ✅ — أو غيّروا التوزيع`, 'info', 5600);
+      feedback.say(who, 'ده مناسب لينا؟ 🤔', 2400);
+      return;
+    }
     if (result.ok) {
       objectives.complete('review');
-      const insights = ['shared', 'care', 'balance', 'talk', ...(this.failedReviews > 0 ? ['revised'] : [])];
+      const agreedSplit = result.notes.length > 0;
+      const insights = ['shared', 'care', agreedSplit ? 'agreedSplit' : 'balance', 'talk', ...(this.failedReviews > 0 ? ['revised'] : [])];
       const stars = 1 + (this.failedReviews === 0 ? 1 : 0) + (this.schedule.wrongAttempts <= 1 ? 1 : 0);
       this.ctx.complete({
         stars,
@@ -310,8 +324,8 @@ export class Level01Controller implements LevelController {
     bg.lineStyle(3, 0x3b2416, 0.8).strokeRoundedRect(0, 0, 270, 112, 18);
     const title = arabic(hud, 135, 18, 'توزيع المسؤوليات ⚖️', 16, COLORS.ink);
     const track = hud.add.rectangle(20, 48, 230, 16, 0xe8dcc8).setOrigin(0, 0.5).setStrokeStyle(2, 0x3b2416);
-    // The comfortable range for her share, shaded on the track (it fills from the right).
-    const zone = hud.add.rectangle(20 + 230 * (1 - 0.55), 48, 230 * 0.25, 16, hex(COLORS.good), 0.35).setOrigin(0, 0.5);
+    // The middle of the track, where neither carries most of it; the same width either side.
+    const zone = hud.add.rectangle(20 + 230 * (1 - LOPSIDED_SHARE), 48, 230 * (2 * LOPSIDED_SHARE - 1), 16, hex(COLORS.good), 0.3).setOrigin(0, 0.5);
     // Full-width bars scaled to their share: a Shape's origin does not follow a changed width.
     const wifeBar = hud.add.rectangle(250, 48, 230, 12, hex(COLORS.wife)).setOrigin(1, 0.5).setScale(0, 1);
     const husbandBar = hud.add.rectangle(20, 48, 230, 12, hex(COLORS.husband)).setOrigin(0, 0.5).setScale(0, 1);
@@ -337,14 +351,12 @@ export class Level01Controller implements LevelController {
 
 function noteText(issue: PlanIssue | undefined, board: PlanningBoard, ctx: LevelContext): string {
   if (!issue) return 'راجعوا الخطة تاني';
-  const { wife, husband } = ctx.players;
+  const { wife } = ctx.players;
   switch (issue.kind) {
     case 'decisionAlone':
       return `«${board.card(issue.cardId).title}» قرار مشترك: مكانه «مع بعض» 💬`;
     case 'heavyOnPregnant':
       return `«${board.card(issue.cardId).title}» تقيل على ${wife.name} لوحدها وقت الحمل 💪`;
-    case 'imbalanced':
-      return issue.heavier === 'wife' ? `الحِمل كتير على ${wife.name} — وزّعوا تاني` : `الحِمل كله تقريبًا على ${husband.name} — شاركوا أكتر`;
     case 'unplaced':
       return `فاضل ${issue.count} كروت`;
   }

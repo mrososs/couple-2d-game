@@ -3,8 +3,13 @@
 A cooperative 2D game for Egyptian couples expecting their first child. Two players — a wife and a
 husband — move through a cozy cartoon Cairo apartment (and the baby shop across the street), solving
 practical puzzles together: sharing responsibilities, budgeting, and preparing a safe nursery.
-Egyptian Arabic throughout. **Each player plays on their own phone**, connected over Wi‑Fi (or one
-phone's hotspot); a one-phone mode remains for practice.
+Egyptian Arabic throughout. **Each player plays on their own phone**, sitting together; a one-phone
+mode remains for practice.
+
+**Local WLAN multiplayer — same Wi‑Fi or reachable hotspot network — no internet required.** One
+phone hosts the room and the game; the other joins over the local network. Nothing goes through
+the internet, and there is no online play. (`src/online/` and `supabase/` hold an optional Supabase
+backend from an earlier experiment; the game does not use it — see `docs/supabase.md`.)
 
 Built with **NG Native** (Angular 22 rendering real native Android/iOS views on React Native's
 Fabric, inside Expo 58) for every menu and screen, and **Phaser 4** for the game itself, running
@@ -21,7 +26,7 @@ inside an NG Native **DOM component** (a web view embedded in the native gamepla
 | Level 1 — قرارنا الكبير الأول | Collect 9 responsibility cards from around the flat and pin them to a three-lane planning board (wife / together / husband). Live balance meter. Halfway, the clinic calls: each partner can read **only their own** schedule (on two phones it shows only on the owner's phone), and both pin the same day on the wall calendar. Review the plan together; decisions left to one person, heavy lifting left to the pregnant partner, or a lopsided load are explained gently and can be fixed. Several valid plans. |
 | Level 2 — تحدي ميزانية البيبي | 3,500 EGP illustrative budget with a 10% emergency reserve. Read the needs list at home, walk to the shop, push the trolley, compare price per nappy (the best value pack is in the storeroom — one partner holds the floor switch while the other goes in), agree on big purchases together (the cot box needs both to carry), then work out the change at the till. Several valid baskets. |
 | Level 3 — تجهيز أوضة البيبي | Carry delivered furniture into the nursery (cot and wardrobe need two; the rest one), snap to a grid, rotate, keep the door swing clear. Clear the cot of pillow, padded bumper, plush toy and loose quilt (the fitted sheet stays) — each explains why. Inspect together: cot away from the window, tall furniture against a wall (anchoring), clear path from the door. Sources in level metadata. |
-| Two phones (Wi‑Fi LAN) | One phone opens a room (native Kotlin WebSocket relay, `modules/lan-relay`) and shows a short code (e.g. `23-58`); the other joins. The host phone runs the game; the guest sends its controls and draws the host's world (display mirroring at 15 Hz, deltas only). Each phone controls its own character, shows its own prompts and controls, keeps its own progress. Pause/resume from either phone, reconnection after drops, private hints per phone. |
+| Two phones (local WLAN) | One phone opens a room (native Kotlin relay, `modules/lan-relay`), advertised on the network (Android NSD) and shown with a six-digit PIN; the other finds it and types the PIN, or types the whole room code (`23-482916`). The relay lets in only the host app and the one paired partner (single-use PIN, then a key), stamps who sent what, and limits frame size and rate. The host phone runs the game; the guest sends its controls and draws the host's world (snapshots at 15 Hz, deltas only, in order). The game waits while a partner is away and resumes when they reconnect; a guest whose app closed can come back to the room. Pausing from either phone; restarting is the host's decision (the partner asks). Results are saved on both phones, once. Details: `docs/wlan-multiplayer-review.md`. |
 | Native features | Haptics (`expo-haptics`) on pick-up, put-down, lifting together, successes and mistakes — on the phone of whoever it concerns; vibration on the partner's phone when someone asks for a hand, on pairing, and on level completion; screen kept awake during play; auto-pause when the app goes to the background; share sheet for the room code; Android back button; landscape lock; AsyncStorage persistence. |
 | Persistence | Progress (stars, unlocked levels, best times), profile and settings are saved by the native app through `@ng-native/expo/async-storage` (the web view's localStorage is in-memory on Android). |
 
@@ -51,28 +56,33 @@ src/
     bridge/protocol.ts    native ⇄ game page contract (session, settings, command → events)
     domain/               pure, unit-tested rules: planning board + schedule, basket/budget,
                           nursery layout + safe sleep, objectives, tile map, level content
-    net/                  two-phone protocol, NetLink (WebSocket), display mirror, HostNet
+    net/                  room protocol (auth, limits), two-phone protocol, NetLink (WebSocket),
+                          display mirror, snapshot order, HostNet
     phaser/               create-game, scenes (boot, level, mirror, hud), systems (input hub,
                           player, interaction, carry, cooperation, feedback), art (procedural),
                           levels (one controller per level + sandbox)
-modules/lan-relay/        local Expo module (Kotlin): WebSocket relay for two-phone play
-scripts/                  android build helpers, dev relay, e2e device driver
+modules/lan-relay/        local Expo module (Kotlin): room relay + NSD discovery for two-phone play
+scripts/                  android build helpers, development room relay (lan-relay.ts), e2e:
+                          device driver, adb UI driver, two-phone playthroughs, relay probe
+tests/lan/                room-protocol conformance tests against the development relay
 ```
 
 **Bridge.** The native gameplay screen renders `<dom-component [src]="gameView" [inputs]=… [outputs]=…>`.
 Inputs (session, settings, command) and outputs (ready, objective, paused, complete, haptic,
 vibrate, net…) are JSON only and low-frequency; movement never crosses the bridge. Results are
 saved by the native app. Leaving the screen destroys the web view (and the game with it); the page
-also destroys Phaser on `pagehide`.
+also destroys Phaser on `pagehide`, and pauses itself when the app goes to the background.
 
 **Levels are data + a controller.** `LevelScene` builds whatever a level declares (map, decor,
 spawns); the level's controller wires interactables to the pure domain logic in `game/domain`.
 
 **Two phones.** `NetLink` connects each game page directly to the relay on the host phone, so the
-real-time traffic stays inside the game layer (no per-frame native messaging). The host is
-authoritative: the guest sends controls (with press counters, so presses are never lost or doubled)
-and receives snapshots of what changed on screen plus HUD events, sounds and effects. Messages are
-scoped by the room PIN.
+real-time traffic stays inside the game layer (no per-frame native messaging). Every connection
+authenticates first (room protocol, `src/game/net/room.ts`): the host app with its host key, the
+partner once with the PIN and then with the key the relay gives it. The host is authoritative:
+the guest sends controls (press counters per session, so presses are never lost or doubled) and
+receives snapshots of what changed on screen plus HUD events, sounds and effects; every rule,
+puzzle verdict and result is decided on the host.
 
 ### Versions (installed and verified)
 Angular 22.2.3 · NG Native 0.18.2 (alpha) · Expo 58.0.19 · React Native 0.88.0 · Phaser 4.2.1 ·
@@ -104,6 +114,8 @@ npm run relay
 
 Open http://localhost:5173/?profile=a and http://localhost:5173/?profile=b, open a room in one and
 join with its code in the other. Or both phones side by side: http://localhost:5173/coop-test.html?scene=level01
+— and in that page's console, a scripted two-phone playthrough with checks:
+`const m = await import('/scripts/e2e/coop-playthrough.js'); await m.run('level01')`.
 
 Android (development build — DOM components do not run in Expo Go on Android). The `android/`
 folder is generated, not committed; create it once after cloning (and again after changing
@@ -128,15 +140,26 @@ npm start
 `android:debug` mirrors the project to `D:\b3` and builds there (see *Windows notes*). For a
 release build with the game page embedded in the APK: `npm run android:release`.
 
-Two phones: both on the same Wi‑Fi (or one phone's hotspot), *Main menu → العبوا على موبايلين*,
-one taps *افتح غرفة*, the other types the code.
+Two phones: both on the same Wi‑Fi (or one phone's hotspot, with the other connected to it),
+*Main menu → العبوا سوا على الواي فاي*. One taps *افتح غرفة* and reads out the six-digit PIN; the
+other taps the room when it appears under *ادخل غرفة* and types the PIN — or types the whole code
+shown under the PIN when the network hides rooms (guest networks often keep devices apart: use a
+hotspot then).
 
 Two emulators instead: `scripts/emulators.ps1` creates a host and a guest emulator (API 35, 1.5 GB
 each) with their data on `D:\DevCache\android\avd` (not C:), boots them one after the other,
 installs an APK on both and forwards the host's relay port. Emulators cannot see each other
-directly, so when the host shows a code like `16-62`, the guest types `10.0.2.2-62` (10.0.2.2 is
-this PC as an emulator sees it). Not API 36.1: with emulator 37.2.12 an idle 36.1 phone grew by
-about 1 GB of host memory a minute, and two of them exhausted a 16 GB laptop.
+directly (and so cannot find each other's rooms), so when the host shows a code like `16-482916`,
+the guest types `10.0.2.2-482916` (10.0.2.2 is this PC as an emulator sees it). Not API 36.1: with
+emulator 37.2.12 an idle 36.1 phone grew by about 1 GB of host memory a minute, and two of them
+exhausted a 16 GB laptop. One emulator as host with the browser as the partner also works:
+`adb forward tcp:7777 tcp:7777`, then join from http://localhost:5173/?profile=b with the code.
+
+The native relay's rules can be probed from the PC through that forward:
+
+```bash
+node scripts/e2e/relay-probe.mjs before ws://127.0.0.1:7777/bwbt <PIN>
+```
 
 ```bash
 powershell -File scripts/emulators.ps1 -Apk D:\b3\android\app\build\outputs\apk\release\app-release.apk
@@ -178,23 +201,25 @@ npm run lint
   APK (game page, fonts and JS bundle embedded; no Metro).
 - Two-phone play is Android-only for hosting (the relay is a Kotlin module); iOS would need the
   same module in Swift. Joining works from any build that can open a WebSocket.
-- Two-phone play on the release APK (commit 3b98e50 with the relay fix below), two API 35
-  emulators (screenshots `docs/screenshots/android-16` to `-26`): opening a room, joining with the code, both lobbies showing the pair, the host
-  starting Level 1 on both phones, the guest's joystick moving the husband on both screens, the
-  guest picking up a task card with both screens showing it carried, and pausing on one phone
-  pausing the other (and resuming from the other). Not yet verified: finishing a level in
-  two-phone mode on the release APK, Levels 2 and 3 in two-phone mode, two physical phones on a
-  real Wi‑Fi network or hotspot.
+- What was verified where, and how, is in `docs/wlan-multiplayer-review.md` §9. In short: all three
+  levels played to completion over the room relay in the browser (two game pages, scripted checks);
+  the native relay and an Android host verified on an emulator with a browser partner, in the
+  debug and the release APK (screenshots `android-27` to `-31`); the earlier, pre-hardening protocol on two emulators with the
+  release APK (`android-16` to `-26`). **Not yet verified: two physical phones on a real Wi‑Fi
+  network or hotspot, finding a room by NSD across two devices, and the hardened build on two
+  Android devices at once.**
+- Frames are plain `ws://` on the local network: other devices cannot get in or speak in the room,
+  but someone who can read the Wi‑Fi traffic itself could read it (see the review, §3).
+  `usesCleartextTraffic` stays on because Android cannot allow cleartext per address range.
 - Release minification broke the relay once: R8 rewrote Java-WebSocket's server loop into code
   Android's verifier rejects, so no room could be opened. `modules/lan-relay/android/proguard-rules.pro`
   keeps that library as written; test two-phone play on a release build after upgrading it.
 - The release APK is signed with the debug key (Expo's template default); a Play Store upload
   needs a release keystore.
-- Host's room screen in landscape on a Pixel 7–sized phone: the status card overflows, so
-  "متصل" and "ده إنت/إنتي" spill under it and *اقفل الغرفة* is cut off at the bottom (the guest's
-  card fits). The guest's objective panel shows only the level title, without the task line.
 - The guest's view follows snapshots at 15 Hz with easing; on a busy network movement can look
   slightly delayed. There is no client-side prediction for the guest's own character.
+- No host migration: if the host's app is closed, the room ends and the host opens a new one.
+  Progress is per phone (no cloud copy).
 - Art and sound are procedural (generated at runtime); no external assets.
 - Health content needs review by a pediatric / obstetric professional before release (see `reviewNotes`).
 - Phaser 4.2.1 renders nothing for a Text with both `rtl` and `resolution > 1`, so Arabic HUD text

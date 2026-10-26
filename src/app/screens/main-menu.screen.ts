@@ -35,7 +35,7 @@ interface Tile {
               <text class="body">⭐ {{ progress.stars() }} من {{ maxStars }} · {{ finished() }} من {{ levels.length }} مراحل</text>
             </view>
           </view>
-          <bwbt-button label="العبوا على موبايلين" icon="📱📱" size="lg" testID="play-two-phones" (tap)="nav.push({ name: 'coop' })" />
+          <bwbt-button label="العبوا سوا على الواي فاي" icon="📱📱" size="lg" testID="play-two-phones" (tap)="nav.push({ name: 'coop' })" />
           <bwbt-button [label]="continueLabel() + ' (موبايل واحد)'" icon="▶️" variant="ghost" size="sm" testID="continue" (tap)="continue()" />
         </view>
         <view class="tiles">

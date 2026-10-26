@@ -36,6 +36,7 @@
     "@ng-native/eslint-plugin": "^0.18.2",
     "@ng-native/testing": "0.18.2",
     "@types/react": "~19.3.0",
+    "@types/ws": "^8.18.2",
     "angular-eslint": "^22.6.0",
     "eslint": "^9.39.5",
     "supabase": "^2.122.0",
@@ -59,7 +60,7 @@
     "android:debug": "powershell -ExecutionPolicy Bypass -File scripts/android-mirror.ps1 app:assembleDebug -PreactNativeArchitectures=x86_64",
     "android:release": "powershell -ExecutionPolicy Bypass -File scripts/android-mirror.ps1 app:assembleRelease -PreactNativeArchitectures=x86_64",
     "lint": "eslint .",
-    "relay": "node scripts/dev-relay.mjs"
+    "relay": "node scripts/lan-relay.ts"
   },
   "private": true
 }

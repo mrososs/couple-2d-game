@@ -1,10 +1,13 @@
 /**
  * Level 1's puzzle: sharing the responsibilities of a first pregnancy on a planning board.
  *
- * The board does not hold one right answer. It checks the approach: decisions that belong to both
- * of them are made together, heavy lifting does not land on the pregnant partner alone, and the
- * load is shared within a range rather than at an exact split - during pregnancy "fair" is not
- * always 50/50, and neither is a plan where one partner carries almost everything.
+ * The board does not hold one right answer, and it holds no "fair" ratio either. Two things are
+ * required, because they follow from the situation rather than from a number: decisions that
+ * belong to both of them are made together, and heavy lifting does not land on the pregnant
+ * partner alone. How the rest is split is the couple's to decide - one works longer hours, the
+ * other is home more, family helps one side. When one of them would carry most of the load (either
+ * of them; the rule is the same both ways) the board does not fail the plan: it says so, and the
+ * couple confirm together that this split suits them.
  */
 
 export type Lane = 'wife' | 'shared' | 'husband';
@@ -21,11 +24,14 @@ export interface TaskCard {
   readonly tags: readonly TaskTag[];
 }
 
+/** What a plan cannot go ahead with. */
 export type PlanIssue =
   | { readonly kind: 'decisionAlone'; readonly cardId: string }
   | { readonly kind: 'heavyOnPregnant'; readonly cardId: string }
-  | { readonly kind: 'imbalanced'; readonly heavier: 'wife' | 'husband' }
   | { readonly kind: 'unplaced'; readonly count: number };
+
+/** What a plan can go ahead with, once both partners have looked at it and agree. */
+export type PlanNote = { readonly kind: 'lopsided'; readonly heavier: 'wife' | 'husband'; readonly share: number };
 
 export interface PlanEvaluation {
   readonly placed: number;
@@ -34,13 +40,21 @@ export interface PlanEvaluation {
   readonly husbandLoad: number;
   /** wife / (wife + husband), 0..1. */
   readonly wifeShare: number;
+  /** Neither partner carries most of the load. */
   readonly balanced: boolean;
+  /** Blocking: the plan has to change. */
   readonly issues: readonly PlanIssue[];
+  /** Not blocking: worth agreeing on out loud. */
+  readonly notes: readonly PlanNote[];
   readonly ok: boolean;
 }
 
-/** The range of the wife's share of the load that counts as balanced. */
-export const BALANCE_RANGE = { min: 0.3, max: 0.55 } as const;
+/**
+ * Above this share of the load, one partner carries "most of it" and the board asks the couple to
+ * confirm the split together. The same for both partners, and a prompt to talk, not a verdict -
+ * an illustrative game rule, not a definition of fairness.
+ */
+export const LOPSIDED_SHARE = 0.7;
 
 export class PlanningBoard {
   private readonly lanes = new Map<string, Lane>();
@@ -105,12 +119,14 @@ export class PlanningBoard {
     const { wife, husband } = this.loads();
     const total = wife + husband;
     const wifeShare = total === 0 ? 0.5 : wife / total;
-    const balanced = wifeShare >= BALANCE_RANGE.min && wifeShare <= BALANCE_RANGE.max;
+    const heavier = wifeShare >= 0.5 ? 'wife' : 'husband';
+    const heavierShare = Math.max(wifeShare, 1 - wifeShare);
+    const balanced = heavierShare <= LOPSIDED_SHARE;
     const issues: PlanIssue[] = [];
     const unplaced = this.cards.length - this.lanes.size;
     if (unplaced > 0) issues.push({ kind: 'unplaced', count: unplaced });
     for (const [id, lane] of this.lanes) issues.push(...issuesFor(this.card(id), lane));
-    if (unplaced === 0 && !balanced) issues.push({ kind: 'imbalanced', heavier: wifeShare > BALANCE_RANGE.max ? 'wife' : 'husband' });
+    const notes: PlanNote[] = unplaced === 0 && !balanced ? [{ kind: 'lopsided', heavier, share: heavierShare }] : [];
     return {
       placed: this.lanes.size,
       total: this.cards.length,
@@ -119,8 +135,14 @@ export class PlanningBoard {
       wifeShare,
       balanced,
       issues,
+      notes,
       ok: issues.length === 0,
     };
+  }
+
+  /** The plan as it stands, to tell whether it changed since the couple last agreed on it. */
+  key(): string {
+    return [...this.lanes].sort(([a], [b]) => a.localeCompare(b)).map(([id, lane]) => `${id}:${lane}`).join(',');
   }
 }
 

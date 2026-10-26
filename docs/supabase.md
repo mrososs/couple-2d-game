@@ -1,6 +1,12 @@
-# Online play: Supabase backend
+# Supabase backend (optional, not used by the game)
 
-Two phones anywhere with internet (not only on the same Wi‑Fi) play through the hosted Supabase
+> **Not part of gameplay.** The game is local WLAN multiplayer only — same Wi‑Fi or a hotspot, no
+> internet (see `docs/wlan-multiplayer-review.md`). Nothing in the app uses this backend for rooms,
+> movement, puzzles or progress. It is kept, with its migrations and the hosted project's data
+> untouched, as groundwork for a possible future cloud backup; it was not changed or deployed for
+> the WLAN work.
+
+The design below was written for two phones anywhere with internet, playing through the hosted Supabase
 project **`tepouugfevlyrlnwhyqm`** ("2D-Couple-Game", eu-west-1, Postgres 17). There is no custom
 server: Postgres functions hold the game's rules, row level security guards every table, and
 Supabase Realtime carries the live traffic between the two phones.

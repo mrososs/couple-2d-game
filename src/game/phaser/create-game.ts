@@ -75,7 +75,7 @@ export function createGame(parent: HTMLElement, session: GameSession, settings: 
   // `advance()` steps the loop by hand, so a test can play the game deterministically even where
   // the page is in the background and requestAnimationFrame is paused.
   let clock = 0;
-  (window as unknown as { __bwbt?: unknown }).__bwbt = {
+  const handle = {
     game,
     services,
     advance(ms: number, frameMs = 1000 / 60) {
@@ -88,6 +88,19 @@ export function createGame(parent: HTMLElement, session: GameSession, settings: 
       }
     },
   };
+  const global = window as unknown as { __bwbt?: unknown };
+  global.__bwbt = handle;
+
+  // The phone's app went to the background (a call, the home button). The native app's own
+  // reaction cannot be relied on there - on Android its JavaScript waits until the app is back -
+  // but this page is told at once, and pauses: the host's game for both phones, the guest's by
+  // asking the host. Coming back, the players resume from the pause sheet.
+  const onVisibility = () => {
+    if (document.visibilityState !== 'hidden') return;
+    const scene = world();
+    if (scene && (scene.sys.isActive() || scene.sys.isPaused())) scene.command({ seq: 0, kind: 'pause' });
+  };
+  document.addEventListener('visibilitychange', onVisibility);
 
   return {
     applySettings(next) {
@@ -110,8 +123,13 @@ export function createGame(parent: HTMLElement, session: GameSession, settings: 
     destroy() {
       if (destroyed) return;
       destroyed = true;
+      document.removeEventListener('visibilitychange', onVisibility);
+      // Phaser tears scenes down on its next frame, which a page being hidden may never run:
+      // the room connections close now, so the partner hears at once and no socket is orphaned.
+      world()?.shutdownNet();
       sfx.dispose();
       game.destroy(true, false);
+      if (global.__bwbt === handle) delete global.__bwbt;
       emit({ type: 'disposed', sceneId: services.session.sceneId });
     },
   };

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import { L1_CARDS, L1_SCHEDULE } from './levels/content.ts';
-import { BALANCE_RANGE, PlanningBoard, SchedulePuzzle, type Lane } from './planning.ts';
+import { PlanningBoard, SchedulePuzzle, type Lane } from './planning.ts';
 
 const BALANCED: Record<string, Lane> = {
   prenatal: 'shared',
@@ -24,9 +24,9 @@ describe('PlanningBoard', () => {
   test('a balanced plan with shared decisions passes', () => {
     const result = boardWith(BALANCED).evaluate();
     expect(result.issues).toEqual([]);
+    expect(result.notes).toEqual([]);
     expect(result.ok).toBe(true);
-    expect(result.wifeShare).toBeGreaterThanOrEqual(BALANCE_RANGE.min);
-    expect(result.wifeShare).toBeLessThanOrEqual(BALANCE_RANGE.max);
+    expect(result.balanced).toBe(true);
   });
 
   test('more than one allocation is valid: there is no single right answer', () => {
@@ -53,11 +53,39 @@ describe('PlanningBoard', () => {
     expect(boardWith({ ...BALANCED, boxes: 'shared' }).evaluate().issues).not.toContainEqual(expect.objectContaining({ kind: 'heavyOnPregnant' }));
   });
 
-  test('a lopsided plan is flagged towards whoever carries too much', () => {
-    const allOnHer = boardWith({ ...BALANCED, boxes: 'husband', groceries: 'wife', cleaning: 'wife', cooking: 'wife', family: 'wife' });
-    expect(allOnHer.evaluate().issues).toContainEqual({ kind: 'imbalanced', heavier: 'wife' });
-    const allOnHim = boardWith({ ...BALANCED, cooking: 'husband', family: 'husband' });
-    expect(allOnHim.evaluate().issues).toContainEqual({ kind: 'imbalanced', heavier: 'husband' });
+  test('a lopsided plan is a note to agree on, not a failure, and the rule is the same for both', () => {
+    const allOnHer = boardWith({ ...BALANCED, boxes: 'husband', groceries: 'wife', cleaning: 'wife', cooking: 'wife', family: 'wife' }).evaluate();
+    expect(allOnHer.ok).toBe(true);
+    expect(allOnHer.balanced).toBe(false);
+    expect(allOnHer.notes).toEqual([{ kind: 'lopsided', heavier: 'wife', share: expect.closeTo(17.5 / 24, 5) }]);
+    const allOnHim = boardWith({ ...BALANCED, cooking: 'husband', family: 'husband' }).evaluate();
+    expect(allOnHim.ok).toBe(true);
+    expect(allOnHim.notes).toEqual([{ kind: 'lopsided', heavier: 'husband', share: expect.closeTo(19.5 / 24, 5) }]);
+  });
+
+  test('the same split mirrored gets the same treatment: nothing depends on which partner it is', () => {
+    const board = new PlanningBoard([
+      { id: 'a', title: 'a', icon: '', load: 3, tags: [] },
+      { id: 'b', title: 'b', icon: '', load: 1, tags: [] },
+    ]);
+    board.place('a', 'wife');
+    board.place('b', 'husband');
+    const one = board.evaluate();
+    board.place('a', 'husband');
+    board.place('b', 'wife');
+    const other = board.evaluate();
+    expect(one.balanced).toBe(other.balanced);
+    expect(one.notes[0]?.share).toBe(other.notes[0]?.share);
+    expect([one.notes[0]?.heavier, other.notes[0]?.heavier]).toEqual(['wife', 'husband']);
+  });
+
+  test("the plan's key changes when a card moves, so an agreement covers that plan only", () => {
+    const board = boardWith(BALANCED);
+    const before = board.key();
+    board.place('cooking', 'husband');
+    expect(board.key()).not.toBe(before);
+    board.place('cooking', 'wife');
+    expect(board.key()).toBe(before);
   });
 
   test('cards can be taken back off the board, last one first', () => {

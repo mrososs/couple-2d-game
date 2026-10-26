@@ -28,12 +28,18 @@ export class Progress {
     return this.save().records[id];
   }
 
-  /** Saves a finished level and returns the level it unlocked, if any. */
+  /** Saves a finished level (once, however often it arrives) and returns the level it unlocked. */
   recordResult(result: LevelResult): LevelId | null {
-    const { save, unlocked } = applyResult(this.save(), result);
+    const { save, unlocked, duplicate } = applyResult(this.save(), result);
+    if (duplicate) return null;
     this.raw.set(save);
     void this.store.flush().catch(() => undefined);
     return unlocked;
+  }
+
+  /** Whether this result was already saved on this phone. */
+  hasResult(id: string): boolean {
+    return this.save().savedResults.includes(id);
   }
 
   updateProfile(change: Partial<Profile>): void {

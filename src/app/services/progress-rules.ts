@@ -28,7 +28,15 @@ export interface SaveData {
   readonly profile: Profile;
   readonly settings: AppSettings;
   readonly records: Readonly<Partial<Record<LevelId, LevelRecord>>>;
+  /**
+   * Ids of the most recent results saved: a result can reach this phone twice in two-phone play
+   * (from the game page and again through the lobby, or after a reconnection) and counts once.
+   */
+  readonly savedResults: readonly string[];
 }
+
+/** How many result ids are remembered; far more than the plays between two reconnections. */
+const SAVED_RESULT_IDS = 64;
 
 export const DEFAULT_PROFILE: Profile = {
   lead: 'wife',
@@ -42,6 +50,7 @@ export const DEFAULT_SAVE: SaveData = {
   profile: DEFAULT_PROFILE,
   settings: { ...DEFAULT_SETTINGS, devMode: false },
   records: {},
+  savedResults: [],
 };
 
 /** The first level is always open; each later one opens when the one before it is finished. */
@@ -58,8 +67,13 @@ export function totalStars(save: SaveData): number {
   return LEVEL_IDS.reduce((sum, id) => sum + (save.records[id]?.stars ?? 0), 0);
 }
 
-/** Records a finished level, keeping the best stars and time, and says what it unlocked. */
-export function applyResult(save: SaveData, result: LevelResult, now = new Date()): { save: SaveData; unlocked: LevelId | null } {
+/**
+ * Records a finished level, keeping the best stars and time, and says what it unlocked. Records
+ * only ever improve (best stars, best time), so a result from the partner's phone never lowers
+ * one made on this phone. A result already saved (same id) changes nothing.
+ */
+export function applyResult(save: SaveData, result: LevelResult, now = new Date()): { save: SaveData; unlocked: LevelId | null; duplicate: boolean } {
+  if (result.id && save.savedResults.includes(result.id)) return { save, unlocked: null, duplicate: true };
   const before = save.records[result.levelId];
   const record: LevelRecord = {
     stars: Math.max(before?.stars ?? 0, clampStars(result.stars)),
@@ -69,7 +83,8 @@ export function applyResult(save: SaveData, result: LevelResult, now = new Date(
   };
   const next = nextLevel(result.levelId);
   const unlocked = next && !isUnlocked(save, next) ? next : null;
-  return { save: { ...save, records: { ...save.records, [result.levelId]: record } }, unlocked };
+  const savedResults = result.id ? [...save.savedResults, result.id].slice(-SAVED_RESULT_IDS) : save.savedResults;
+  return { save: { ...save, records: { ...save.records, [result.levelId]: record }, savedResults }, unlocked, duplicate: false };
 }
 
 /** Fills in anything missing from a stored save, so a partial or older one still loads. */
@@ -87,6 +102,7 @@ export function normalizeSave(value: unknown): SaveData {
     },
     settings: { ...DEFAULT_SAVE.settings, ...v.settings },
     records: Object.fromEntries(Object.entries(v.records ?? {}).filter(([id]) => (LEVEL_IDS as readonly string[]).includes(id))),
+    savedResults: Array.isArray(v.savedResults) ? v.savedResults.filter((id): id is string => typeof id === 'string').slice(-SAVED_RESULT_IDS) : [],
   };
 }
 

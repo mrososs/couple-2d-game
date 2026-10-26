@@ -8,6 +8,12 @@
       "port": 5173
     },
     {
+      "name": "relay",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "relay"],
+      "port": 7777
+    },
+    {
       "name": "metro",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["start"],

@@ -8,6 +8,7 @@ import { createController } from '../levels/index.ts';
 import type { LevelContext, LevelController } from '../levels/level-controller.ts';
 import { COLORS, PLAYER_COLOR, servicesOf } from '../services.ts';
 import { HostNet } from '../../net/host-net.ts';
+import { randomId, type PauseReason } from '../../net/protocol.ts';
 import { CarrySystem } from '../systems/carry.ts';
 import { JointCarry } from '../systems/cooperation.ts';
 import { Feedback } from '../systems/feedback.ts';
@@ -39,6 +40,13 @@ export class LevelScene extends Phaser.Scene {
   private finished = false;
   private perfClock = 0;
   private readonly intents = new Map<CharacterId, Intent>();
+  /** This run of the level; a restart starts a new one. Results carry it as their id. */
+  private run = '';
+  /** Why the game is paused. The scene runs only while this is empty. */
+  private readonly pauseReasons = new Set<PauseReason>();
+  /** Set while restarting, so the partner is not told the host left. */
+  private restarting = false;
+  private announcedPause = '';
 
   constructor() {
     super('level');
@@ -49,6 +57,10 @@ export class LevelScene extends Phaser.Scene {
     const { session } = services;
     this.finished = false;
     this.started = false;
+    this.restarting = false;
+    this.pauseReasons.clear();
+    this.announcedPause = '';
+    this.run = randomId();
     this.controller = createController(session.sceneId);
     const { setup } = this.controller;
 
@@ -167,7 +179,11 @@ export class LevelScene extends Phaser.Scene {
         !!net,
       );
       if (net?.role === 'host') {
-        this.hostNet = new HostNet(this, this.hud, services, net, this.hub, this.players, this.interaction, this.joint, (kind) => this.command({ seq: 0, kind }));
+        this.hostNet = new HostNet(this, this.hud, services, net, this.run, this.hub, this.players, this.interaction, this.joint, {
+          partner: (present) => this.setPause('partner', !present),
+          guestPause: (paused) => this.setPause('guest', paused),
+          restartRequest: () => services.emit({ type: 'request', kind: 'restart' }),
+        });
       }
       const content = this.controller.content;
       this.hud.setLevelTitle(content ? `${content.number}. ${content.title}` : 'تجربة التكامل');
@@ -190,6 +206,8 @@ export class LevelScene extends Phaser.Scene {
       }
       if (things.length > 1) this.physics.add.collider(things, things);
       this.started = true;
+      // Two phones: the shared game waits until the partner's phone has joined.
+      if (this.hostNet && !this.hostNet.partnerPresent) this.setPause('partner', true);
     });
     this.interaction.onPrompt((id, prompt) => {
       if (id === this.hub.active) this.hud.setPrompt(prompt);
@@ -227,7 +245,6 @@ export class LevelScene extends Phaser.Scene {
 
   update(time: number, delta: number): void {
     if (!this.started) return;
-    this.hostNet?.update(delta);
     if (this.finished) {
       for (const p of Object.values(this.players)) p.update(delta);
       this.feedback.update();
@@ -255,22 +272,59 @@ export class LevelScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Commands from this phone's app. The host's player controls the shared game: their resume
+   * also lifts the partner's pause (never the wait for a partner who is away), and a restart is
+   * theirs to make - or to grant when the partner asks for one.
+   */
   command(command: GameCommand): void {
-    const services = servicesOf(this);
-    if (command.kind === 'pause' && !this.scene.isPaused()) {
+    switch (command.kind) {
+      case 'pause':
+        this.setPause('host', true);
+        break;
+      case 'resume':
+        this.setPause('guest', false, false);
+        this.setPause('host', false);
+        break;
+      case 'restart':
+        this.hostNet?.answerRestart(true);
+        this.restarting = true;
+        this.hud.setPaused(false);
+        if (this.scene.isPaused()) this.scene.resume();
+        this.scene.restart();
+        break;
+      case 'decline':
+        this.hostNet?.answerRestart(false);
+        break;
+    }
+  }
+
+  /** Adds or lifts one reason for the pause; the scene pauses while any reason stands. */
+  setPause(reason: PauseReason, on: boolean, announce = true): void {
+    if (on) this.pauseReasons.add(reason);
+    else this.pauseReasons.delete(reason);
+    if (!announce) return;
+    const reasons = [...this.pauseReasons].sort();
+    const key = reasons.join(',');
+    const paused = reasons.length > 0;
+    if (paused && !this.scene.isPaused()) {
       this.scene.pause();
       this.hud.setPaused(true);
-      this.hostNet?.paused(true);
-      services.emit({ type: 'paused' });
-    } else if (command.kind === 'resume' && this.scene.isPaused()) {
+    } else if (!paused && this.scene.isPaused()) {
       this.scene.resume();
       this.hud.setPaused(false);
-      this.hostNet?.paused(false);
-      services.emit({ type: 'resumed' });
-    } else if (command.kind === 'restart') {
-      this.hud.setPaused(false);
-      this.scene.restart();
     }
+    if (key === this.announcedPause) return;
+    this.announcedPause = key;
+    this.hostNet?.paused(reasons);
+    servicesOf(this).emit(paused ? { type: 'paused', reasons } : { type: 'resumed' });
+  }
+
+  /** Closes the network at once (the page is going), without waiting for Phaser's next frame. */
+  shutdownNet(): void {
+    // A finished level is not a host leaving: the guest already has the result.
+    this.hostNet?.destroy(!this.finished);
+    this.hostNet = undefined;
   }
 
   private finish(result: Omit<LevelResult, 'durationSec' | 'levelId'>): void {
@@ -292,7 +346,8 @@ export class LevelScene extends Phaser.Scene {
     if (!levelId) return;
     const durationSec = Math.round(this.elapsed());
     this.time.delayedCall(2200, () => {
-      const complete = { ...result, levelId, durationSec };
+      const room = services.session.net?.room;
+      const complete = { ...result, id: room ? `${room}:${this.run}` : this.run, levelId, durationSec };
       // Both phones record the level: the guest's app hears it through the host.
       this.hostNet?.complete(complete);
       services.emit({ type: 'complete', result: complete });
@@ -351,7 +406,7 @@ export class LevelScene extends Phaser.Scene {
   }
 
   private teardown(): void {
-    this.hostNet?.destroy();
+    this.hostNet?.destroy(!this.restarting && !this.finished);
     this.hostNet = undefined;
     this.controller.dispose?.();
     this.joint.destroy();

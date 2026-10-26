@@ -42,6 +42,15 @@ export class Navigator {
     this.stack.set([screen]);
   }
 
+  /** Pops screens until `name` is on top; false (and nothing popped) when it is not in the stack. */
+  popTo(name: Screen['name']): boolean {
+    const stack = this.stack();
+    const i = stack.findLastIndex((s) => s.name === name);
+    if (i < 0) return false;
+    if (i < stack.length - 1) this.stack.set(stack.slice(0, i + 1));
+    return true;
+  }
+
   /** Pops a screen; false at the bottom, so the platform can background the app. */
   back(): boolean {
     if (this.stack().length <= 1) return false;

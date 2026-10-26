@@ -40,6 +40,8 @@ describe('progression rules', () => {
     expect(partial.profile.lead).toBe('wife');
     expect(Object.keys(partial.records)).toEqual(['level01']);
     expect(partial.settings.sound).toBe(true);
+    expect(partial.savedResults).toEqual([]);
+    expect(normalizeSave({ savedResults: ['a', 3, null, 'b'] }).savedResults).toEqual(['a', 'b']);
   });
 });
 
@@ -60,6 +62,29 @@ describe('Progress (persistence)', () => {
     expect(relaunched.record('level01')?.stars).toBe(3);
     expect(relaunched.profile().names.husband).toBe('عمر');
     expect(relaunched.settings().sound).toBe(false);
+  });
+
+  test('a result that arrives twice (two-phone play) is saved once, and remembered across launches', () => {
+    const disk = new MemoryStore();
+    const p = progressOn(disk);
+    const played = { ...result('level01', 2), id: 'room1:runA' };
+    expect(p.recordResult(played)).toBe('level02');
+    expect(p.recordResult(played)).toBeNull();
+    expect(p.record('level01')?.plays).toBe(1);
+    const relaunched = progressOn(new MemoryStore({ 'bwbt.save.v1': disk.raw('bwbt.save.v1') }));
+    expect(relaunched.hasResult('room1:runA')).toBe(true);
+    relaunched.recordResult(played);
+    expect(relaunched.record('level01')?.plays).toBe(1);
+    // A different play of the same level still counts.
+    relaunched.recordResult({ ...played, id: 'room1:runB', stars: 3 });
+    expect(relaunched.record('level01')).toMatchObject({ plays: 2, stars: 3 });
+  });
+
+  test("the partner's result never lowers a record made on this phone", () => {
+    const p = progressOn(new MemoryStore());
+    p.recordResult({ ...result('level02', 3, 100), id: 'a' });
+    p.recordResult({ ...result('level02', 1, 300), id: 'b' });
+    expect(p.record('level02')).toMatchObject({ stars: 3, bestTimeSec: 100 });
   });
 
   test('resetting forgets the levels but keeps who is playing', () => {

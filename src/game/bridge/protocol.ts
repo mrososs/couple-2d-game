@@ -8,7 +8,8 @@
  * about session changes, settings and the occasional command.
  */
 
-import type { HapticKind, NetConfig } from '../net/protocol.ts';
+import type { LinkEnd } from '../net/link.ts';
+import type { HapticKind, NetConfig, PauseReason } from '../net/protocol.ts';
 
 export type CharacterId = 'wife' | 'husband';
 export type LevelId = 'level01' | 'level02' | 'level03';
@@ -49,7 +50,11 @@ export const DEFAULT_SETTINGS: GameSettings = {
   reducedMotion: false,
 };
 
-export type GameCommandKind = 'pause' | 'resume' | 'restart';
+/**
+ * `decline` is the host's "no" to the partner's restart request. On the guest's phone, pause,
+ * resume and restart are requests the host's game decides on.
+ */
+export type GameCommandKind = 'pause' | 'resume' | 'restart' | 'decline';
 
 export interface GameCommand {
   /** Increases with every command, so re-sending the same inputs never repeats one. */
@@ -58,6 +63,11 @@ export interface GameCommand {
 }
 
 export interface LevelResult {
+  /**
+   * The play this result belongs to: the same on both phones in two-phone play, so a result that
+   * arrives twice (the game page and the lobby, or again after a reconnection) is saved once.
+   */
+  readonly id?: string;
   readonly levelId: LevelId;
   /** 1..3: every completed level earns at least one; the rest reward the approach. */
   readonly stars: number;
@@ -90,14 +100,22 @@ export type GameEvent =
       readonly objectId: string;
       readonly by: CharacterId;
     }
-  | { readonly type: 'paused' }
+  /** Why the game is paused: this player, the partner, or the partner's phone being away. */
+  | { readonly type: 'paused'; readonly reasons?: readonly PauseReason[] }
   | { readonly type: 'resumed' }
+  /** Host only: the partner asks to start the level again. */
+  | { readonly type: 'request'; readonly kind: 'restart' }
+  /** Guest only: the host's answer to its restart request. */
+  | { readonly type: 'answer'; readonly kind: 'restart'; readonly ok: boolean }
   /** Feel on this phone: the app plays it through the native haptics engine. */
   | { readonly type: 'haptic'; readonly kind: HapticKind }
   /** A longer buzz on this phone, as when the partner asks for a hand. */
   | { readonly type: 'vibrate' }
-  /** Two-phone play: whether this page can reach the other phone. */
-  | { readonly type: 'net'; readonly status: 'connecting' | 'online' | 'partner-away' | 'offline' }
+  /**
+   * Two-phone play: whether this page can reach the other phone. `host-left`: the host closed the
+   * level; `closed`: the room is gone or refused this phone (`end` says why).
+   */
+  | { readonly type: 'net'; readonly status: 'connecting' | 'online' | 'partner-away' | 'offline' | 'host-left' | 'closed'; readonly end?: LinkEnd }
   | { readonly type: 'complete'; readonly result: LevelResult }
   | { readonly type: 'perf'; readonly fps: number }
   | { readonly type: 'disposed'; readonly sceneId: SceneId };

@@ -7,7 +7,7 @@ import { KeepAwake } from '@ng-native/expo/keep-awake';
 import { DeviceOrientation } from '@ng-native/expo/orientation';
 import { isLevelId, type GameCommand, type GameCommandKind, type GameEvent, type GameSession, type SceneId } from '../../game/bridge/protocol.ts';
 import { levelContent } from '../../game/domain/levels/content.ts';
-import type { HapticKind } from '../../game/net/protocol.ts';
+import type { HapticKind, PauseReason } from '../../game/net/protocol.ts';
 import gameView from '../../web/game-view.ts';
 import { CoopSession } from '../services/coop.ts';
 import { Navigator } from '../services/navigator.ts';
@@ -55,23 +55,66 @@ import { Button } from '../ui/button.ts';
         <text class="pause-icon">❚❚</text>
       </pressable>
 
-      @if (paused()) {
+      @if (roomGone(); as gone) {
         <view class="shade">
-          <view class="sheet">
-            <text class="sheet-title">استراحة ☕</text>
-            @if (objective()) {
-              <text class="sheet-objective">المطلوب دلوقتي: {{ objective() }}</text>
-            }
-            <view class="row">
-              <text class="row-label">الصوت</text>
-              <switch [checked]="progress.settings().sound" (checkedChange)="progress.updateSettings({ sound: $event })" />
-            </view>
+          <view class="sheet" testID="room-gone">
+            <text class="sheet-title">{{ gone === 'host-left' ? '🚪 ' + partner() + ' خرج من المرحلة' : '📡 الغرفة اتقفلت' }}</text>
+            <text class="sheet-objective">
+              {{ gone === 'host-left' ? 'ارجعوا للغرفة وابدأوا المرحلة تاني لما تجهزوا.' : 'افتحوا غرفة جديدة على موبايل واحد منكم.' }}
+            </text>
             <view class="buttons">
-              <bwbt-button label="كمّل" icon="▶️" (tap)="resume()" />
-              <bwbt-button label="من الأول" icon="🔁" variant="sun" (tap)="restart()" />
-              <bwbt-button label="خروج" variant="ghost" (tap)="exit()" />
+              <bwbt-button label="ارجع للغرفة" icon="🏠" testID="back-to-room" (tap)="exit()" />
             </view>
           </view>
+        </view>
+      } @else if (paused()) {
+        <view class="shade">
+          @if (onlyPartnerAway()) {
+            <view class="sheet" testID="waiting-partner">
+              <text class="sheet-title">📡 مستنيين {{ partner() }}…</text>
+              <text class="sheet-objective">{{ role() === 'host' ? 'الاتصال اتقطع — بنحاول نرجع الاتصال. اللعب واقف لحد ما يرجع.' : 'بنحاول نرجع الاتصال…' }}</text>
+              <text class="sheet-hint">اتأكدوا إن الموبايلين على نفس الشبكة</text>
+              <view class="buttons">
+                <bwbt-button label="خروج" variant="ghost" (tap)="exit()" />
+              </view>
+            </view>
+          } @else {
+            <view class="sheet" testID="pause-sheet">
+              <text class="sheet-title">{{ pausedByPartnerOnly() ? partner() + ' وقّف اللعب ☕' : 'استراحة ☕' }}</text>
+              @if (pausedByPartnerOnly() && role() === 'guest') {
+                <text class="sheet-objective">مستنيين {{ partner() }} يكمّل</text>
+              } @else if (objective()) {
+                <text class="sheet-objective">المطلوب دلوقتي: {{ objective() }}</text>
+              }
+              @if (restartAsked()) {
+                <view class="ask" testID="restart-request">
+                  <text class="ask-text">{{ partner() }} عايز يبدأ المرحلة من الأول 🔁</text>
+                  <view class="ask-buttons">
+                    <bwbt-button label="ابدأوا من الأول" size="sm" testID="accept-restart" (tap)="restart()" />
+                    <bwbt-button label="لا، نكمّل" size="sm" variant="ghost" testID="decline-restart" (tap)="decline()" />
+                  </view>
+                </view>
+              }
+              @if (notice()) {
+                <text class="sheet-hint">{{ notice() }}</text>
+              }
+              <view class="row">
+                <text class="row-label">الصوت</text>
+                <switch [checked]="progress.settings().sound" (checkedChange)="progress.updateSettings({ sound: $event })" />
+              </view>
+              <view class="buttons">
+                @if (!(pausedByPartnerOnly() && role() === 'guest')) {
+                  <bwbt-button label="كمّل" icon="▶️" testID="resume" (tap)="resume()" />
+                }
+                @if (role() === 'guest') {
+                  <bwbt-button label="نبدأ من الأول؟" icon="🔁" variant="sun" testID="ask-restart" [disabled]="restartPending()" (tap)="restart()" />
+                } @else {
+                  <bwbt-button label="من الأول" icon="🔁" variant="sun" testID="restart" (tap)="restart()" />
+                }
+                <bwbt-button label="خروج" variant="ghost" (tap)="exit()" />
+              </view>
+            </view>
+          }
         </view>
       }
     </view>
@@ -175,6 +218,32 @@ import { Button } from '../ui/button.ts';
     .buttons {
       gap: 10px;
     }
+    .sheet-hint {
+      font-family: 'Baloo Bhaijaan 2';
+      font-size: 15px;
+      color: #9a7660;
+      text-align: center;
+    }
+    .ask {
+      gap: 8px;
+      padding: 12px;
+      border-radius: 18px;
+      border-width: 2px;
+      border-color: #f2a93b;
+      background-color: #fff1d6;
+    }
+    .ask-text {
+      font-family: 'Baloo Bhaijaan 2';
+      font-weight: 800;
+      font-size: 17px;
+      text-align: center;
+      color: #3b2416;
+    }
+    .ask-buttons {
+      flex-direction: row;
+      gap: 8px;
+      justify-content: center;
+    }
   `,
 })
 export class GameplayScreen {
@@ -190,8 +259,31 @@ export class GameplayScreen {
 
   protected readonly ready = signal(false);
   protected readonly paused = signal(false);
+  /** Why the shared game is paused (two phones); empty with one. */
+  protected readonly pauseReasons = signal<readonly PauseReason[]>([]);
   protected readonly objective = signal('');
   protected readonly command = signal<GameCommand | null>(null);
+  /** Host: the partner asked to start the level again. */
+  protected readonly restartAsked = signal(false);
+  /** Guest: a restart request is waiting for the host's answer. */
+  protected readonly restartPending = signal(false);
+  protected readonly notice = signal<string | null>(null);
+  /** Two phones: the room or the level is gone, and this phone can only go back. */
+  protected readonly roomGone = signal<'host-left' | 'closed' | null>(null);
+
+  protected readonly role = computed(() => (this.coop() ? this.coopSession.role() : null));
+  protected readonly partner = computed(() => this.coopSession.partnerName() ?? 'شريكك');
+  protected readonly onlyPartnerAway = computed(() => {
+    const r = this.pauseReasons();
+    return r.length > 0 && r.every((x) => x === 'partner');
+  });
+  /** Paused by the other phone's player and not by this one. */
+  protected readonly pausedByPartnerOnly = computed(() => {
+    const r = this.pauseReasons();
+    const mine = this.role() === 'guest' ? 'guest' : 'host';
+    const theirs = this.role() === 'guest' ? 'host' : 'guest';
+    return r.includes(theirs) && !r.includes(mine);
+  });
 
   protected readonly title = computed(() => {
     const id = this.sceneId();
@@ -219,6 +311,8 @@ export class GameplayScreen {
   });
 
   private seq = 0;
+  /** The level was completed (rather than left). */
+  private finished = false;
   private readonly haptics = inject(Haptics);
   private readonly vibration = inject(Vibration);
 
@@ -228,6 +322,11 @@ export class GameplayScreen {
     destroyRef.onDestroy(unlock);
     // Nobody touches the screen while thinking out loud together: keep it on during play.
     destroyRef.onDestroy(inject(KeepAwake).hold('gameplay'));
+    // The host leaving the level takes the partner's phone back to the room too - but not when
+    // the level was finished, which takes both phones to the result screen instead.
+    destroyRef.onDestroy(() => {
+      if (this.coop() && !this.finished) this.coopSession.levelEnded();
+    });
     const stopBack = inject(HardwareBack).handle(() => {
       if (this.paused()) this.resume();
       else this.pause();
@@ -251,12 +350,30 @@ export class GameplayScreen {
         break;
       case 'paused':
         this.paused.set(true);
+        this.pauseReasons.set(event.reasons ?? []);
         break;
       case 'resumed':
         this.paused.set(false);
+        this.pauseReasons.set([]);
+        this.restartAsked.set(false);
+        this.notice.set(null);
+        break;
+      case 'request':
+        this.restartAsked.set(true);
+        this.vibration.pattern([0, 70, 60, 70]);
+        break;
+      case 'answer':
+        this.restartPending.set(false);
+        this.notice.set(event.ok ? null : `${this.partner()} فضّل تكمّلوا 🙂`);
         break;
       case 'complete': {
+        // Saved once, however it arrives: the partner's phone also hears it through the lobby.
+        this.finished = true;
         const unlocked = this.progress.recordResult(event.result);
+        if (this.coop()) {
+          this.coopSession.shareResult(event.result);
+          this.coopSession.levelFinished();
+        }
         this.vibration.pattern([0, 60, 80, 60, 80, 120]);
         this.nav.replace({ name: 'result', result: event.result, unlocked, coop: this.coop() });
         break;
@@ -270,6 +387,8 @@ export class GameplayScreen {
         break;
       case 'net':
         this.netStatus.set(event.status);
+        if (event.status === 'host-left' || event.status === 'closed') this.roomGone.set(event.status);
+        else if (event.status === 'online') this.roomGone.set(null);
         break;
       default:
         break;
@@ -288,14 +407,28 @@ export class GameplayScreen {
     this.send('pause');
   }
 
+  /** The host's resume lifts both players' pause; the guest's lifts its own (a request). */
   protected resume(): void {
-    this.paused.set(false);
+    if (this.role() !== 'guest' || this.pauseReasons().every((r) => r === 'guest')) this.paused.set(false);
     this.send('resume');
   }
 
+  /** The host restarts for both; the guest asks the host. */
   protected restart(): void {
+    if (this.role() === 'guest') {
+      this.restartPending.set(true);
+      this.notice.set(`طلبنا من ${this.partner()}… ⏳`);
+      this.send('restart');
+      return;
+    }
+    this.restartAsked.set(false);
     this.paused.set(false);
     this.send('restart');
+  }
+
+  protected decline(): void {
+    this.restartAsked.set(false);
+    this.send('decline');
   }
 
   protected exit(): void {

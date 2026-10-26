@@ -32,6 +32,8 @@ export class GameView implements OnDestroy {
 
   protected readonly started = signal(false);
   private runtime: GameRuntime | null = null;
+  /** Set once the component is gone: a boot still waiting on fonts must not start a game then. */
+  private disposed = false;
   private sessionId = -1;
   private lastCommand = -1;
   private readonly host = inject(ElementRef<HTMLElement>);
@@ -64,8 +66,11 @@ export class GameView implements OnDestroy {
 
   private async boot(): Promise<void> {
     await loadFonts();
+    // The screen may have closed while the fonts loaded: a game started now would never be
+    // destroyed, and in two-phone play would hold a room connection open.
+    if (this.runtime || this.disposed) return;
     const stage = (this.host.nativeElement as HTMLElement).querySelector('.stage') as HTMLElement;
-    if (this.runtime) return;
+    if (!stage) return;
     const session = this.session();
     this.sessionId = session.sessionId;
     this.lastCommand = this.command()?.seq ?? -1;
@@ -79,6 +84,7 @@ export class GameView implements OnDestroy {
   }
 
   private dispose(): void {
+    this.disposed = true;
     window.removeEventListener('pagehide', this.onPageHide);
     this.runtime?.destroy();
     this.runtime = null;

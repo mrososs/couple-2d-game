@@ -22,19 +22,60 @@
   <body>
     <!--
       Two game pages, as on two phones: the left one hosts, the right one joins, both through the
-      development relay (npm run relay). ?scene=level02 picks the level. Each frame's window is
-      window.host / window.guest, for scripted checks.
+      development relay (npm run relay) and the room protocol (src/game/net/room.ts). The harness
+      pairs first, as the two lobbies would - the host's connection learns the PIN, a guest
+      connection pairs with it and gets the guest key - then opens both pages with their keys.
+      ?scene=level02 picks the level. Each frame's window is window.host / window.guest, for
+      scripted checks; window.events collects what the pages tell the app.
     -->
     <script type="module">
-      const scene = new URLSearchParams(location.search).get('scene') ?? 'level01';
+      const params = new URLSearchParams(location.search);
+      const scene = params.get('scene') ?? 'level01';
+      const url = `ws://${location.hostname}:7777/bwbt`;
+      const hostKey = 'bwbt-development-host-key';
+
+      const open = (auth, until) =>
+        new Promise((resolve, reject) => {
+          const socket = new WebSocket(url);
+          socket.onopen = () => socket.send(JSON.stringify({ t: 'auth', v: 2, ...auth }));
+          socket.onmessage = (e) => {
+            const frame = JSON.parse(e.data);
+            if (frame.t === 'denied') reject(new Error(`denied: ${frame.reason}`));
+            if (until(frame)) resolve({ socket, frame });
+          };
+          socket.onerror = () => reject(new Error(`no relay at ${url} (npm run relay)`));
+        });
+
+      const host = await open({ role: 'host', key: hostKey }, (f) => f.t === 'room');
+      const { room } = host.frame;
+      let guestKey;
+      if (host.frame.pin) {
+        const guest = await open({ role: 'guest', pin: host.frame.pin }, (f) => f.t === 'authed');
+        guestKey = guest.frame.key;
+        guest.socket.close();
+      } else {
+        // Already paired (a reload): start the room over for a fresh pairing.
+        host.socket.send(JSON.stringify({ ch: 'ctl', t: 'reset' }));
+        const reset = await new Promise((resolve) => (host.socket.onmessage = (e) => JSON.parse(e.data).pin && resolve(JSON.parse(e.data))));
+        const guest = await open({ role: 'guest', pin: reset.pin }, (f) => f.t === 'authed');
+        guestKey = guest.frame.key;
+        guest.socket.close();
+      }
+      host.socket.close();
+      window.room = { room, guestKey };
+
       const base = { sceneId: scene, sessionId: 1, lead: 'wife', names: { wife: 'منى', husband: 'كريم' }, outfits: { wife: 0, husband: 0 }, devMode: false };
-      const url = `ws://${location.hostname}:7777`;
-      for (const [role, me] of [['host', 'wife'], ['guest', 'husband']]) {
+      const pages = [
+        ['host', 'wife', hostKey],
+        ['guest', 'husband', guestKey],
+      ];
+      for (const [role, me, key] of pages) {
         const frame = document.createElement('iframe');
-        frame.name = JSON.stringify({ inputs: { session: { ...base, lead: me, net: { role, url, pin: '42', me } } } });
+        frame.name = JSON.stringify({ inputs: { session: { ...base, lead: me, net: { role, url, key, room, me } } } });
         frame.src = 'game.html';
         document.body.appendChild(frame);
         window[role] = frame.contentWindow;
+        window[`${role}Frame`] = frame;
       }
       window.addEventListener('message', (e) => {
         const data = e.data?.data;
